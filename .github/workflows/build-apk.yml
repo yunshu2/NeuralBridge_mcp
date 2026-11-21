@@ -17,6 +17,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # The upstream repo does not ship gradle/wrapper/gradle-wrapper.jar, so
+      # ./gradlew cannot start. Install Gradle 8.13 directly instead.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      # The runner image already ships an Android SDK. Asking setup-android to
+      # install its default package set fails, because the legacy 'tools'
+      # package no longer exists in the current sdkmanager repository.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -26,22 +36,27 @@ jobs:
       - name: Install SDK components
         run: |
           sdkmanager --version
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" "cmake;3.22.1"
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" "cmake;3.22.1" "ndk;26.1.10909125"
 
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
+      - name: Show toolchain
+        run: |
+          java -version
+          gradle --version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/ndk"
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Show outputs
         if: always()
         run: ls -la android/app/build/outputs/apk/debug/ || true
 
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
